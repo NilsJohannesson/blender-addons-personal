@@ -1,0 +1,85 @@
+{
+    "name": "Cobblestone Parish Road",
+    "id": "cobblestone_parish_road",
+    "scraper": "PolyHavenHdriScraper",
+    "fetchUrl": "https://polyhaven.com/a/cobblestone_parish_road",
+    "thumbnail": "thumb.png",
+    "variants": [
+        "1k (exr)",
+        "2k (exr)",
+        "4k (exr)",
+        "8k (exr)",
+        "16k (exr)",
+        "24k (exr)",
+        "1k (hdr)",
+        "2k (hdr)",
+        "4k (hdr)",
+        "8k (hdr)",
+        "16k (hdr)",
+        "24k (hdr)"
+    ],
+    "custom": {
+        "variant_data": [
+            [
+                "1k",
+                "exr",
+                "https://dl.polyhaven.org/file/ph-assets/HDRIs/exr/1k/cobblestone_parish_road_1k.exr"
+            ],
+            [
+                "2k",
+                "exr",
+                "https://dl.polyhaven.org/file/ph-assets/HDRIs/exr/2k/cobblestone_parish_road_2k.exr"
+            ],
+            [
+                "4k",
+                "exr",
+                "https://dl.polyhaven.org/file/ph-assets/HDRIs/exr/4k/cobblestone_parish_road_4k.exr"
+            ],
+            [
+                "8k",
+                "exr",
+                "https://dl.polyhaven.org/file/ph-assets/HDRIs/exr/8k/cobblestone_parish_road_8k.exr"
+            ],
+            [
+                "16k",
+                "exr",
+                "https://dl.polyhaven.org/file/ph-assets/HDRIs/exr/16k%2B/cobblestone_parish_road_16k.exr"
+            ],
+            [
+                "24k",
+                "exr",
+                "https://dl.polyhaven.org/file/ph-assets/HDRIs/exr/16k%2B/cobblestone_parish_road_24k.exr"
+            ],
+            [
+                "1k",
+                "hdr",
+                "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/cobblestone_parish_road_1k.hdr"
+            ],
+            [
+                "2k",
+                "hdr",
+                "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/2k/cobblestone_parish_road_2k.hdr"
+            ],
+            [
+                "4k",
+                "hdr",
+                "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/4k/cobblestone_parish_road_4k.hdr"
+            ],
+            [
+                "8k",
+                "hdr",
+                "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/8k/cobblestone_parish_road_8k.hdr"
+            ],
+            [
+                "16k",
+                "hdr",
+                "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/16k%2B/cobblestone_parish_road_16k.hdr"
+            ],
+            [
+                "24k",
+                "hdr",
+                "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/16k%2B/cobblestone_parish_road_24k.hdr"
+            ]
+        ]
+    }
+}

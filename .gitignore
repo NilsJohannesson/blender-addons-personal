@@ -1,8 +1,16 @@
-__pycache__/
-*.py[cod]
-*.zip
-dist/
-.DS_Store
-Thumbs.db
+# Blender autosave / backup sidecars
 *.blend1
 *.blend2
+
+# Byte-compiled / caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Build / package output
+dist/
+*.zip
+
+# OS junk
+.DS_Store
+Thumbs.db
