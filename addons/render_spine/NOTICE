@@ -1,0 +1,9 @@
+RenderSpine
+Copyright 2026 Nils Johannesson
+
+This product includes software developed by Nils Johannesson.
+
+Design and behavior were informed by RenderNode by Atticus:
+https://github.com/atticus-lv/RenderNode
+Upstream snapshot copyright remains with its contributors and is available
+under the Apache License 2.0.

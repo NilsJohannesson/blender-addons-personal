@@ -1,0 +1,23 @@
+schema_version = "1.0.0"
+
+id = "render_spine"
+version = "1.0.0"
+name = "RenderSpine"
+tagline = "Build and execute render jobs with nodes"
+maintainer = "Nils Johannesson"
+type = "add-on"
+
+tags = ["Render"]
+blender_version_min = "5.2.0"
+license = ["SPDX:Apache-2.0"]
+copyright = ["2026 Nils Johannesson"]
+
+[permissions]
+files = "Create render output directories and image files"
+
+[build]
+paths_exclude_pattern = [
+    "__pycache__/",
+    "/.git/",
+    "/*.zip",
+]

@@ -1,0 +1,8 @@
+RenderSpine contains a clean implementation informed by the workflow
+and behavior of RenderNode by Atticus:
+
+https://github.com/atticus-lv/RenderNode
+
+The reference snapshot is licensed under Apache License 2.0. No upstream
+runtime modules, rigging_nodes code, t3dn_bip code, icons, or binary presets
+are packaged in this extension.
