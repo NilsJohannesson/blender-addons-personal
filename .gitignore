@@ -2,6 +2,9 @@
 *.blend1
 *.blend2
 
+# Lily Surface Scraper downloads (local cache; keep on disk, do not commit)
+dev/LilySurface/
+
 # Byte-compiled / caches
 __pycache__/
 *.py[cod]

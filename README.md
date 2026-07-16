@@ -16,7 +16,7 @@ See [addons/render_spine/README.md](addons/render_spine/README.md).
 
 ## Dev scratch
 
-`dev/` holds a local Blender scene (`renderspine-dev-001.blend`), sample
-outputs under `dev/render/`, and LilySurface assets. Binary media
-(`.blend`, `.exr`, `.mp4`, `.png`) is tracked with Git LFS. Blender
+`dev/` holds a local Blender scene (`renderspine-dev-001.blend`) and sample
+outputs under `dev/render/`. Binary media (`.blend`, `.exr`, `.mp4`, `.png`)
+is tracked with Git LFS. `dev/LilySurface/` (scraper downloads) and Blender
 autosave sidecars (`*.blend1`, `*.blend2`) stay ignored.
