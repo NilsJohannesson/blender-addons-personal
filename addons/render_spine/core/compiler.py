@@ -1,8 +1,9 @@
 """Deterministic, side-effect-free graph compiler."""
 
-from .model import CompileResult, Diagnostic, JobList, JobSpec
+from .model import CompileResult, Diagnostic, TaskList, TaskSpec, ValueList
 from .path_template import coerce_to_string
 from .validation import validate_tree
+from .variants import VariantError, expand_pending_axes
 
 
 class CompileError(Exception):
@@ -44,12 +45,15 @@ class CompileContext:
         )
 
     def _coerce_input(self, socket, value, node):
+        # ValueList feeds deferred variant axes; do not stringify.
+        if isinstance(value, ValueList):
+            return value
         if not getattr(socket, "rsp_coerce_to_string", False):
             return value
-        if isinstance(value, (JobSpec, JobList)):
+        if isinstance(value, (TaskSpec, TaskList)):
             self.error(
                 "STRING_COERCE",
-                "Cannot convert Job / Job List to string",
+                "Cannot convert Task / Task List to string",
                 node,
                 socket,
             )
@@ -111,36 +115,40 @@ class CompileContext:
             self.visiting.pop()
 
 
-def _job_outputs(tree):
+def _task_outputs(tree):
     nodes = [
         node
         for node in tree.nodes
-        if getattr(node, "rsp_is_job_output", False) and not node.mute
+        if getattr(node, "rsp_is_task_output", False) and not node.mute
     ]
     return sorted(nodes, key=lambda node: (node.name, node.as_pointer()))
 
 
 def compile_tree(tree, strict=True):
-    """Compile tree to immutable JobSpec values without changing Blender data."""
+    """Compile tree to immutable TaskSpec values without changing Blender data."""
     context = CompileContext(tree)
     context.diagnostics.extend(validate_tree(tree))
-    outputs = _job_outputs(tree)
+    outputs = _task_outputs(tree)
     if not outputs:
-        context.error("NO_OUTPUT", "Graph has no enabled Job Output node")
+        context.error("NO_OUTPUT", "Graph has no enabled Task Output node")
 
     jobs = []
     for node in outputs:
         value = context.output(node)
-        if isinstance(value, JobSpec):
-            jobs.append(value)
-        elif isinstance(value, JobList):
-            jobs.extend(value.jobs)
-        elif value is not None:
-            context.error(
-                "OUTPUT_TYPE",
-                "Job Output must compile to JobSpec or JobList",
-                node,
-            )
+        try:
+            if isinstance(value, TaskSpec):
+                jobs.extend(expand_pending_axes(value).tasks)
+            elif isinstance(value, TaskList):
+                for task in value.tasks:
+                    jobs.extend(expand_pending_axes(task).tasks)
+            elif value is not None:
+                context.error(
+                    "OUTPUT_TYPE",
+                    "Task Output must compile to TaskSpec or TaskList",
+                    node,
+                )
+        except VariantError as exc:
+            context.error("VARIANT", str(exc), node)
 
     diagnostics = tuple(sorted(context.diagnostics, key=lambda item: item.sort_key()))
     result = CompileResult(tuple(jobs), diagnostics, tuple(context.order))

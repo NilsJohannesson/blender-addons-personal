@@ -42,8 +42,9 @@ No upstream module is imported at runtime.
 | `nodes/List/*.py` | Reimplemented | Job list and active/list index |
 | `nodes/Scene/GetScene*.py` | Redesigned | Explicit scene references and compile-time defaults |
 | `nodes/Scene/SetScene*.py` | Reimplemented | Camera, world, view layer, engine, resolution, simplify, color management |
-| `nodes/Output/*.py` | Reimplemented | Frame range, output path, image format, film |
-| `nodes/Object/*.py` | Reimplemented | Visibility, transform, material, and action overrides |
+| `nodes/Output/*.py` | Reimplemented | Frame range, output path expressions (`$V/$res/$F4` + `{tokens}`), live Resolved preview, image format, film |
+| `nodes/Object/*.py` | Reimplemented | Visibility, transform, material, action, and light settings overrides |
+| *(new)* Variant Axis / Render Variants | Redesigned | TOPs-style cartesian job fan-out from typed value lists (not in upstream) |
 | `nodes/Collection/*.py` | Reimplemented | Collection visibility overrides |
 | `nodes/Eevee_cycles/SetCycles*.py` | Reimplemented | Current Cycles sampling and selected render settings |
 | `nodes/Eevee_cycles/SetEevee*.py` | Redesigned | Current Eevee sampling only; removed Bloom/GTAO/legacy SSR controls |
@@ -74,7 +75,9 @@ No upstream module is imported at runtime.
 | `operators/op_group_operate.py` | Redesigned | Native Blender 5.2 group interfaces |
 | `operators/op_mute_nodes.py` | Deferred | Blender's built-in mute behavior |
 | `operators/rsn_helper/*.py` | Deferred | Editor convenience tools after core stability |
-| `operators/draw_nodes/*.py` | Removed | `bgl` was removed; no custom overlay in v1 |
+| `operators/draw_nodes/*.py` | Removed | `bgl` overlays not ported; Viewer uses transactional Apply instead |
+| `nodes/Task/ProcessorNode.py` | Reimplemented | `Processor` node shows live render-queue progress |
+| `nodes/old_nodes/Viewer.py` | Redesigned | `Viewer` node applies a connected Job (no GPU outline draw) |
 | `operators/op_create_comp_tree.py` | Deferred | Uses removed compositor API |
 | `operators/op_save_task_to_file.py` | Removed | Broken upstream implementation |
 | `operators/op_call_blend.py` | Removed | Hard-coded background repair workflow |

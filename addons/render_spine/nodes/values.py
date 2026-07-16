@@ -56,6 +56,22 @@ class RSP_VectorValueNode(RSP_TypedValueNode, bpy.types.Node):
         return tuple(self.value)
 
 
+class RSP_ColorValueNode(RSP_TypedValueNode, bpy.types.Node):
+    bl_idname = "RenderSpineNodeColorValue"
+    bl_label = "Color"
+    rsp_outputs = (("RenderSpineNodeSocketColor", "Value"),)
+    value: FloatVectorProperty(
+        size=3,
+        subtype="COLOR",
+        min=0.0,
+        max=1.0,
+        default=(1.0, 1.0, 1.0),
+    )
+
+    def rsp_compile(self, context, socket):
+        return tuple(self.value)
+
+
 class RSP_DatablockValueNode(RSP_TypedValueNode):
     def rsp_compile(self, context, socket):
         return self.value
@@ -109,6 +125,7 @@ CLASSES = (
     RSP_FloatValueNode,
     RSP_StringValueNode,
     RSP_VectorValueNode,
+    RSP_ColorValueNode,
     RSP_ObjectValueNode,
     RSP_MaterialValueNode,
     RSP_CollectionValueNode,

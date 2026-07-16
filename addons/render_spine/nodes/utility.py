@@ -5,26 +5,26 @@ import math
 import bpy
 from bpy.props import BoolProperty, EnumProperty
 
-from ..core.model import JobList, JobSpec
+from ..core.model import TaskList, TaskSpec
 from ..core.node import RSP_NodeBase
 from ..core.path_template import sanitize_token_value, token_value
 
 
 class RSP_JobSwitchNode(RSP_NodeBase, bpy.types.Node):
     bl_idname = "RenderSpineNodeJobSwitch"
-    bl_label = "Job Switch"
+    bl_label = "Task Switch"
     rsp_inputs = (
         ("RenderSpineNodeSocketBool", "Condition"),
-        ("RenderSpineNodeSocketJob", "False"),
-        ("RenderSpineNodeSocketJob", "True"),
+        ("RenderSpineNodeSocketTask", "False"),
+        ("RenderSpineNodeSocketTask", "True"),
     )
-    rsp_outputs = (("RenderSpineNodeSocketJob", "Job"),)
+    rsp_outputs = (("RenderSpineNodeSocketTask", "Task"),)
 
     def rsp_compile(self, context, socket):
         name = "True" if context.input(self, "Condition") else "False"
         value = context.input(self, name, required=True)
-        if not isinstance(value, JobSpec):
-            raise TypeError("{} input requires JobSpec".format(name))
+        if not isinstance(value, TaskSpec):
+            raise TypeError("{} input requires TaskSpec".format(name))
         return value
 
 
@@ -162,8 +162,8 @@ class RSP_ToStringNode(RSP_NodeBase, bpy.types.Node):
 
     def rsp_compile(self, context, socket):
         value = context.input(self, "Value")
-        if isinstance(value, (JobSpec, JobList)):
-            raise TypeError("Cannot convert Job / Job List to string")
+        if isinstance(value, (TaskSpec, TaskList)):
+            raise TypeError("Cannot convert Task / Task List to string")
         if self.sanitize:
             return sanitize_token_value(value)
         return token_value(value)

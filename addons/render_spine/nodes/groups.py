@@ -4,7 +4,7 @@ import bpy
 from bpy.props import PointerProperty
 
 from ..core.compiler import CompileError, compile_tree
-from ..core.model import JobSpec
+from ..core.model import TaskSpec
 from ..core.node import RSP_NodeBase
 
 
@@ -17,9 +17,9 @@ def _group_tree_poll(self, tree):
 
 class RSP_JobGroupNode(RSP_NodeBase, bpy.types.Node):
     bl_idname = "RenderSpineNodeJobGroup"
-    bl_label = "Job Group"
-    rsp_inputs = (("RenderSpineNodeSocketJob", "Job"),)
-    rsp_outputs = (("RenderSpineNodeSocketJob", "Job"),)
+    bl_label = "Task Group"
+    rsp_inputs = (("RenderSpineNodeSocketTask", "Task"),)
+    rsp_outputs = (("RenderSpineNodeSocketTask", "Task"),)
 
     group_tree: PointerProperty(
         name="Group",
@@ -31,9 +31,9 @@ class RSP_JobGroupNode(RSP_NodeBase, bpy.types.Node):
         layout.prop(self, "group_tree", text="")
 
     def rsp_compile(self, context, socket):
-        job = context.input(self, "Job", required=True)
-        if not isinstance(job, JobSpec):
-            raise TypeError("Job input requires JobSpec")
+        job = context.input(self, "Task", required=True)
+        if not isinstance(job, TaskSpec):
+            raise TypeError("Task input requires TaskSpec")
         if self.group_tree is None:
             raise ValueError("Select a render graph group")
         try:
@@ -41,11 +41,11 @@ class RSP_JobGroupNode(RSP_NodeBase, bpy.types.Node):
         except CompileError as exc:
             messages = "; ".join(item.message for item in exc.diagnostics)
             raise ValueError("Group compile failed: " + messages) from exc
-        if len(nested.jobs) != 1:
+        if len(nested.tasks) != 1:
             raise ValueError("Group graph must compile exactly one job")
 
         result = job
-        for override in nested.jobs[0].overrides:
+        for override in nested.tasks[0].overrides:
             result = result.with_override(
                 override.path,
                 override.value,

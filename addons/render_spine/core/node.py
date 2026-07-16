@@ -2,7 +2,8 @@
 
 import bpy
 
-from .model import JobSpec
+from .model import TaskSpec
+from .variants import apply_override_or_axis
 
 
 def apply_engine_samples(values, engine, samples):
@@ -37,19 +38,21 @@ class RSP_ValueNodeBase(RSP_NodeBase):
         return getattr(self, "value", None)
 
 
-class RSP_JobTransformNodeBase(RSP_NodeBase):
-    rsp_inputs = (("RenderSpineNodeSocketJob", "Job"),)
-    rsp_outputs = (("RenderSpineNodeSocketJob", "Job"),)
+class RSP_TaskTransformNodeBase(RSP_NodeBase):
+    rsp_inputs = (("RenderSpineNodeSocketTask", "Task"),)
+    rsp_outputs = (("RenderSpineNodeSocketTask", "Task"),)
     rsp_overrides = ()
 
     def rsp_compile(self, context, socket):
-        job = context.input(self, "Job", required=True)
-        if not isinstance(job, JobSpec):
-            raise TypeError("Job input requires JobSpec")
-        values = {}
+        job = context.input(self, "Task", required=True)
+        if not isinstance(job, TaskSpec):
+            raise TypeError("Task input requires TaskSpec")
+        result = job
         for input_name, path in self.rsp_overrides:
-            values[path] = context.input(self, input_name)
-        return job.with_overrides(values)
+            result = apply_override_or_axis(
+                result, path, context.input(self, input_name)
+            )
+        return result
 
 
 def datablock_name(value):

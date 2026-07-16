@@ -1,12 +1,16 @@
-"""Expand job output-path templates using compiled overrides + scene state."""
+"""Expand task output-path templates using compiled overrides + scene state."""
 
+import math
 from dataclasses import replace
 
 from ..core.model import Override
 from ..core.path_template import (
     PathTemplateError,
     alias_for_override_path,
+    expand_path_expression,
     expand_path_template,
+    format_color_token,
+    sanitize_token_value,
     token_value,
 )
 
@@ -14,8 +18,9 @@ from ..core.path_template import (
 __all__ = (
     "PathTemplateError",
     "build_path_tokens",
-    "expand_job_filepath",
-    "resolved_job_overrides",
+    "expand_task_filepath",
+    "expand_path_expression",
+    "resolved_task_overrides",
     "validate_output_filepath",
 )
 
@@ -60,16 +65,41 @@ def _override_value(override):
     return getattr(override, "value", None)
 
 
-def _job_overrides(job):
+def _override_target_type(override):
+    if isinstance(override, dict):
+        return override.get("target_type", "") or ""
+    return getattr(override, "target_type", "") or ""
+
+
+def _override_target_name(override):
+    if isinstance(override, dict):
+        return override.get("target_name", "") or ""
+    return getattr(override, "target_name", "") or ""
+
+
+def _collection_token_from_job(job):
+    for override in _task_overrides(job):
+        if _override_target_type(override) != "collections":
+            continue
+        name = _override_target_name(override)
+        if name:
+            return sanitize_token_value(name)
+    metadata = _metadata_map(job)
+    if metadata.get("collection"):
+        return sanitize_token_value(metadata["collection"])
+    return ""
+
+
+def _task_overrides(job):
     return tuple(getattr(job, "overrides", ()) or ())
 
 
-def _job_name(job):
+def _task_name(job):
     value = getattr(job, "name", None)
     return str(value) if value not in (None, "") else "Render"
 
 
-def _job_source_scene(job):
+def _task_source_scene(job):
     value = getattr(job, "source_scene", "") or ""
     if not isinstance(value, str):
         value = getattr(value, "name", value)
@@ -84,27 +114,58 @@ def _metadata_map(job):
 
 
 def build_path_tokens(job, scene):
-    """Build ``{token}`` values for a job against a concrete scene."""
+    """Build path-expression token values for a task against a concrete scene."""
     tokens = {
-        "name": _job_name(job),
-        "job": _job_name(job),
+        "name": _task_name(job),
+        "task": _task_name(job),
+        "job": _task_name(job),
+        "label": _task_name(job),
     }
-    source = _job_source_scene(job)
+    source = _task_source_scene(job)
     tokens["scene"] = source or (scene.name if scene is not None else "")
 
     overrides = {}
-    for override in _job_overrides(job):
+    for override in _task_overrides(job):
         path = _override_path(override)
         if not path:
             continue
         overrides[path] = _override_value(override)
         alias = alias_for_override_path(path)
         if alias and alias != "path":
-            tokens[alias] = token_value(overrides[path])
+            value = overrides[path]
+            # RNA stores radians; path tokens use degrees like the light panel.
+            if path == "data.spread":
+                value = math.degrees(float(value))
+                tokens[alias] = token_value(value)
+            elif path == "data.color":
+                tokens[alias] = format_color_token(value)
+            else:
+                tokens[alias] = token_value(value)
 
     metadata = _metadata_map(job)
     if metadata.get("view_layer"):
         tokens["view_layer"] = token_value(metadata["view_layer"])
+    if "variant_index" in metadata:
+        tokens["variant_index"] = token_value(metadata["variant_index"])
+    if "variant" in metadata:
+        tokens["variant"] = token_value(metadata["variant"])
+    if "version" in metadata:
+        tokens["version"] = token_value(metadata["version"])
+
+    collection = _collection_token_from_job(job)
+    if collection:
+        tokens["collection"] = collection
+
+    try:
+        import bpy as _bpy
+
+        blend_path = getattr(_bpy.data, "filepath", "") or ""
+        if blend_path:
+            tokens["blend"] = _bpy.path.basename(blend_path).rsplit(".", 1)[0]
+        else:
+            tokens["blend"] = "untitled"
+    except Exception:
+        tokens.setdefault("blend", "untitled")
 
     if scene is not None:
         if "camera" not in tokens or not tokens["camera"]:
@@ -171,27 +232,50 @@ def build_path_tokens(job, scene):
         "motion_blur_shutter",
         "simplify",
         "simplify_subdiv",
+        "variant",
+        "variant_index",
+        "intensity",
+        "color",
+        "spread",
+        "size",
+        "blend",
+        "version",
+        "label",
+        "resolution",
+        "collection",
+        "ev",
     ):
         tokens.setdefault(key, "")
 
     return tokens
 
 
-def expand_job_filepath(template, job, scene):
-    expanded = expand_path_template(template, build_path_tokens(job, scene))
+def _hash_frames_for_scene(scene):
+    state = getattr(scene, "rsp_state", None) if scene is not None else None
+    return bool(getattr(state, "rendering", False))
+
+
+def expand_task_filepath(template, job, scene):
+    tokens = build_path_tokens(job, scene)
+    expanded = expand_path_expression(
+        template, tokens, hash_frames=_hash_frames_for_scene(scene)
+    )
     return validate_output_filepath(expanded)
 
 
-def resolved_job_overrides(job, scene):
+def resolved_task_overrides(job, scene):
     """Return overrides with filepath templates expanded."""
     tokens = build_path_tokens(job, scene)
+    hash_frames = _hash_frames_for_scene(scene)
     resolved = []
-    for override in _job_overrides(job):
+    for override in _task_overrides(job):
         path = _override_path(override)
         value = _override_value(override)
         if path in _FILEPATH_PATHS and isinstance(value, str):
-            if "{" in value:
-                value = expand_path_template(value, tokens)
+            if "{" in value or "$" in value:
+                value = expand_path_expression(
+                    value, tokens, hash_frames=hash_frames
+                )
             value = validate_output_filepath(value)
             if isinstance(override, Override):
                 resolved.append(replace(override, value=value))

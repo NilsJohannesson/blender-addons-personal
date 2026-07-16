@@ -1,13 +1,18 @@
 """Scene and render setting override nodes."""
 
 import bpy
-from bpy.props import PointerProperty
+from bpy.props import BoolProperty, IntProperty, PointerProperty, StringProperty
 
-from ..core.model import JobSpec
-from ..core.node import RSP_JobTransformNodeBase, apply_engine_samples, scene_snapshot
+from ..core.compiler import CompileContext
+from ..core.model import TaskList, TaskSpec
+from ..core.node import RSP_TaskTransformNodeBase, apply_engine_samples, scene_snapshot
+from ..core.path_template import PATH_TOKEN_MENU, PathTemplateError
+from ..core.variants import VariantError, apply_override_or_axis, expand_pending_axes
+from ..execution.path_expand import build_path_tokens, expand_path_expression
+from .tasks import _apply_view_layer
 
 
-J = ("RenderSpineNodeSocketJob", "Job")
+J = ("RenderSpineNodeSocketTask", "Task")
 I = "RenderSpineNodeSocketInt"
 F = "RenderSpineNodeSocketFloat"
 B = "RenderSpineNodeSocketBool"
@@ -85,7 +90,7 @@ def _resolve_pass_view_layer(job, layer_name, scene):
     return name
 
 
-class RSP_SettingsNode(RSP_JobTransformNodeBase):
+class RSP_SettingsNode(RSP_TaskTransformNodeBase):
     rsp_defaults = {}
 
     def init(self, context):
@@ -101,7 +106,7 @@ class RSP_SettingsNode(RSP_JobTransformNodeBase):
 
 
 class RSP_RenderSettingsNode(RSP_SettingsNode, bpy.types.Node):
-    """Optional override pack. Chain after Render Job to retarget quality/film."""
+    """Optional override pack. Chain after Render Task to retarget quality/film."""
 
     bl_idname = "RenderSpineNodeRenderSettings"
     bl_label = "Render Settings"
@@ -115,7 +120,7 @@ class RSP_RenderSettingsNode(RSP_SettingsNode, bpy.types.Node):
         (B, "Motion Blur"),
         (F, "Motion Blur Shutter"),
     )
-    rsp_outputs = (("RenderSpineNodeSocketJob", "Job"),)
+    rsp_outputs = (("RenderSpineNodeSocketTask", "Task"),)
     rsp_defaults = {
         "Engine": "CYCLES",
         "Samples": 128,
@@ -129,9 +134,9 @@ class RSP_RenderSettingsNode(RSP_SettingsNode, bpy.types.Node):
     )
 
     def rsp_compile(self, context, socket):
-        job = context.input(self, "Job", required=True)
-        if not isinstance(job, JobSpec):
-            raise TypeError("Job input requires JobSpec")
+        job = context.input(self, "Task", required=True)
+        if not isinstance(job, TaskSpec):
+            raise TypeError("Task input requires TaskSpec")
         values = {}
         world = context.input(self, "World")
         if world is not None:
@@ -147,7 +152,7 @@ class RSP_CameraNode(RSP_SettingsNode, bpy.types.Node):
     bl_idname = "RenderSpineNodeSetCamera"
     bl_label = "Set Camera"
     rsp_inputs = (J, (O, "Camera"))
-    rsp_outputs = (("RenderSpineNodeSocketJob", "Job"),)
+    rsp_outputs = (("RenderSpineNodeSocketTask", "Task"),)
     rsp_overrides = (("Camera", "camera"),)
 
 
@@ -155,7 +160,7 @@ class RSP_WorldNode(RSP_SettingsNode, bpy.types.Node):
     bl_idname = "RenderSpineNodeSetWorld"
     bl_label = "Set World"
     rsp_inputs = (J, (W, "World"))
-    rsp_outputs = (("RenderSpineNodeSocketJob", "Job"),)
+    rsp_outputs = (("RenderSpineNodeSocketTask", "Task"),)
     rsp_overrides = (("World", "world"),)
 
 
@@ -163,7 +168,7 @@ class RSP_ViewLayerNode(RSP_SettingsNode, bpy.types.Node):
     bl_idname = "RenderSpineNodeSetViewLayer"
     bl_label = "Set View Layer"
     rsp_inputs = (J, (VL, "View Layer"))
-    rsp_outputs = (("RenderSpineNodeSocketJob", "Job"),)
+    rsp_outputs = (("RenderSpineNodeSocketTask", "Task"),)
     rsp_overrides = ()
 
     def init(self, context):
@@ -176,33 +181,20 @@ class RSP_ViewLayerNode(RSP_SettingsNode, bpy.types.Node):
                 pass
 
     def rsp_compile(self, context, socket):
-        job = context.input(self, "Job", required=True)
-        if not isinstance(job, JobSpec):
-            raise TypeError("Job input requires JobSpec")
+        job = context.input(self, "Task", required=True)
+        if not isinstance(job, TaskSpec):
+            raise TypeError("Task input requires TaskSpec")
         layer_name = context.input(self, "View Layer") or ""
         if not layer_name:
             raise ValueError("View layer is required")
-        if '"' in layer_name or "\\" in layer_name:
-            raise ValueError("View layer name cannot contain quotes or backslashes")
-        source = job.source_scene
-        scene = source if isinstance(source, bpy.types.Scene) else bpy.data.scenes.get(source)
-        scene = scene or bpy.context.scene
-        if scene.view_layers.get(layer_name) is None:
-            raise ValueError("View layer not found: {}".format(layer_name))
-        result = job.with_metadata("view_layer", layer_name)
-        for layer in sorted(scene.view_layers, key=lambda item: item.name):
-            result = result.with_override(
-                'view_layers["{}"].use'.format(layer.name),
-                layer.name == layer_name,
-            )
-        return result
+        return _apply_view_layer(job, layer_name)
 
 
 class RSP_EngineNode(RSP_SettingsNode, bpy.types.Node):
     bl_idname = "RenderSpineNodeSetEngine"
     bl_label = "Set Render Engine"
     rsp_inputs = (J, (EN, "Engine"))
-    rsp_outputs = (("RenderSpineNodeSocketJob", "Job"),)
+    rsp_outputs = (("RenderSpineNodeSocketTask", "Task"),)
     rsp_overrides = (("Engine", "render.engine"),)
     rsp_defaults = {"Engine": "BLENDER_EEVEE"}
 
@@ -211,7 +203,7 @@ class RSP_CyclesSamplesNode(RSP_SettingsNode, bpy.types.Node):
     bl_idname = "RenderSpineNodeCyclesSamples"
     bl_label = "Cycles Samples"
     rsp_inputs = (J, (I, "Render"), (I, "Viewport"))
-    rsp_outputs = (("RenderSpineNodeSocketJob", "Job"),)
+    rsp_outputs = (("RenderSpineNodeSocketTask", "Task"),)
     rsp_overrides = (
         ("Render", "cycles.samples"),
         ("Viewport", "cycles.preview_samples"),
@@ -223,7 +215,7 @@ class RSP_EeveeSamplesNode(RSP_SettingsNode, bpy.types.Node):
     bl_idname = "RenderSpineNodeEeveeSamples"
     bl_label = "Eevee Samples"
     rsp_inputs = (J, (I, "Render"), (I, "Viewport"))
-    rsp_outputs = (("RenderSpineNodeSocketJob", "Job"),)
+    rsp_outputs = (("RenderSpineNodeSocketTask", "Task"),)
     rsp_overrides = (
         ("Render", "eevee.taa_render_samples"),
         ("Viewport", "eevee.taa_samples"),
@@ -235,7 +227,7 @@ class RSP_FrameRangeNode(RSP_SettingsNode, bpy.types.Node):
     bl_idname = "RenderSpineNodeFrameRange"
     bl_label = "Frame Range"
     rsp_inputs = (J, (I, "Start"), (I, "End"), (I, "Step"))
-    rsp_outputs = (("RenderSpineNodeSocketJob", "Job"),)
+    rsp_outputs = (("RenderSpineNodeSocketTask", "Task"),)
     rsp_overrides = (
         ("Start", "frame_start"),
         ("End", "frame_end"),
@@ -248,7 +240,7 @@ class RSP_ResolutionNode(RSP_SettingsNode, bpy.types.Node):
     bl_idname = "RenderSpineNodeResolution"
     bl_label = "Resolution"
     rsp_inputs = (J, (I, "Width"), (I, "Height"), (I, "Percent"))
-    rsp_outputs = (("RenderSpineNodeSocketJob", "Job"),)
+    rsp_outputs = (("RenderSpineNodeSocketTask", "Task"),)
     rsp_overrides = (
         ("Width", "render.resolution_x"),
         ("Height", "render.resolution_y"),
@@ -257,19 +249,167 @@ class RSP_ResolutionNode(RSP_SettingsNode, bpy.types.Node):
     rsp_defaults = {"Width": 1920, "Height": 1080, "Percent": 100}
 
 
+class RSP_OT_path_token_add(bpy.types.Operator):
+    bl_idname = "rsp.path_token_add"
+    bl_label = "Insert Path Token"
+    bl_options = {"INTERNAL", "UNDO"}
+
+    tree_name: StringProperty()
+    node_name: StringProperty()
+    token: StringProperty()
+
+    def execute(self, context):
+        tree = bpy.data.node_groups.get(self.tree_name)
+        if tree is None:
+            return {"CANCELLED"}
+        node = tree.nodes.get(self.node_name)
+        if node is None:
+            return {"CANCELLED"}
+        socket = node.inputs.get("Path")
+        if socket is None:
+            return {"CANCELLED"}
+        current = socket.default_value or ""
+        socket.default_value = current + self.token
+        return {"FINISHED"}
+
+
+class RSP_MT_path_tokens(bpy.types.Menu):
+    bl_idname = "RSP_MT_path_tokens"
+    bl_label = "Path Tokens"
+
+    def draw(self, context):
+        layout = self.layout
+        space = getattr(context, "space_data", None)
+        tree = getattr(space, "edit_tree", None) or getattr(space, "node_tree", None)
+        node = getattr(tree, "nodes", None)
+        active = getattr(node, "active", None) if node is not None else None
+        if tree is None or active is None:
+            layout.label(text="No active Output Path node")
+            return
+        for label, token in PATH_TOKEN_MENU:
+            op = layout.operator("rsp.path_token_add", text=label)
+            op.tree_name = tree.name
+            op.node_name = active.name
+            op.token = token
+
+
 class RSP_OutputPathNode(RSP_SettingsNode, bpy.types.Node):
+    """Output path with live expression preview (RenderNode File Path)."""
+
     bl_idname = "RenderSpineNodeOutputPath"
     bl_label = "Output Path"
-    rsp_inputs = (J, (FP, "Path"))
-    rsp_outputs = (("RenderSpineNodeSocketJob", "Job"),)
-    rsp_overrides = (("Path", "render.filepath"),)
+    bl_width_default = 260
+    rsp_inputs = (J, (FP, "Path"), (I, "Version"))
+    rsp_outputs = (("RenderSpineNodeSocketTask", "Task"),)
+    rsp_overrides = ()
+    rsp_defaults = {
+        "Path": "//renders/$label/$V/$res_$camera_$F4",
+        "Version": 1,
+    }
+
+    save_blend_relative: BoolProperty(
+        name="Save in file folder",
+        description="Prefix the expression with // (blend-relative)",
+        default=True,
+    )
+
+    def init(self, context):
+        super().init(context)
+        self.width = 260
+
+    def draw_buttons(self, context, layout):
+        if not bpy.data.filepath:
+            layout.label(text="Save your .blend for // paths", icon="ERROR")
+        layout.prop(self, "save_blend_relative")
+        row = layout.row(align=True)
+        row.label(text="Insert")
+        row.menu(RSP_MT_path_tokens.bl_idname, text="", icon="EYEDROPPER")
+        preview = self._preview_path(context)
+        box = layout.box().column(align=True)
+        box.label(text="Resolved", icon="FILE_FOLDER")
+        box.label(text=preview)
+
+    def _expression(self):
+        socket = self.inputs.get("Path")
+        text = ""
+        if socket is not None and not socket.is_linked:
+            text = socket.default_value or ""
+        elif socket is not None and socket.is_linked:
+            text = "(linked expression)"
+        if self.save_blend_relative and text and not text.startswith("//"):
+            if text.startswith("/") or (len(text) > 1 and text[1] == ":"):
+                return text
+            text = "//" + text.lstrip("/")
+        return text
+
+    def _preview_job(self, context, version):
+        """Compile upstream Task for Resolved preview; fall back to stub."""
+        job = TaskSpec(name="Preview")
+        socket = self.inputs.get("Task")
+        if socket is not None and socket.is_linked:
+            try:
+                compile_ctx = CompileContext(self.id_data)
+                value = compile_ctx.input(self, "Task")
+                tasks = []
+                if isinstance(value, TaskSpec):
+                    tasks = list(expand_pending_axes(value).tasks)
+                elif isinstance(value, TaskList):
+                    for item in value.tasks:
+                        tasks.extend(expand_pending_axes(item).tasks)
+                if tasks:
+                    index = 0
+                    state = getattr(context.scene, "rsp_state", None)
+                    if state is not None and len(tasks) > 1:
+                        index = max(0, min(int(state.active_task_index), len(tasks) - 1))
+                    job = tasks[index]
+            except (TypeError, ValueError, VariantError, AttributeError, RuntimeError):
+                pass
+        return job.with_metadata("version", version)
+
+    def _preview_path(self, context):
+        expression = self._expression()
+        if expression == "(linked expression)":
+            return expression
+        if not expression:
+            return "(empty)"
+        version_socket = self.inputs.get("Version")
+        version = 1
+        if version_socket is not None and not version_socket.is_linked:
+            version = int(version_socket.default_value)
+        job = self._preview_job(context, version)
+        try:
+            tokens = build_path_tokens(job, context.scene)
+            tokens["version"] = str(version)
+            expanded = expand_path_expression(expression, tokens)
+            try:
+                return bpy.path.abspath(expanded)
+            except Exception:
+                return expanded
+        except PathTemplateError as exc:
+            return "Error: {}".format(exc)
+
+    def rsp_compile(self, context, socket):
+        job = context.input(self, "Task", required=True)
+        if not isinstance(job, TaskSpec):
+            raise TypeError("Task input requires TaskSpec")
+        path = context.input(self, "Path")
+        version = int(context.input(self, "Version"))
+        if isinstance(path, str):
+            text = path
+            if self.save_blend_relative and text and not text.startswith("//"):
+                if not (text.startswith("/") or (len(text) > 1 and text[1] == ":")):
+                    text = "//" + text.lstrip("/")
+            job = apply_override_or_axis(job, "render.filepath", text)
+        else:
+            job = apply_override_or_axis(job, "render.filepath", path)
+        return job.with_metadata("version", version)
 
 
 class RSP_OutputFormatNode(RSP_SettingsNode, bpy.types.Node):
     bl_idname = "RenderSpineNodeOutputFormat"
     bl_label = "Output Format"
     rsp_inputs = (J, (FM, "Format"))
-    rsp_outputs = (("RenderSpineNodeSocketJob", "Job"),)
+    rsp_outputs = (("RenderSpineNodeSocketTask", "Task"),)
     rsp_overrides = (("Format", "render.image_settings.file_format"),)
     rsp_defaults = {"Format": "PNG"}
 
@@ -289,7 +429,7 @@ class RSP_FFmpegVideoNode(RSP_SettingsNode, bpy.types.Node):
         (FA, "Audio"),
         (I, "Audio Bitrate"),
     )
-    rsp_outputs = (("RenderSpineNodeSocketJob", "Job"),)
+    rsp_outputs = (("RenderSpineNodeSocketTask", "Task"),)
     rsp_overrides = ()
     rsp_defaults = {
         "Container": "MPEG4",
@@ -301,9 +441,9 @@ class RSP_FFmpegVideoNode(RSP_SettingsNode, bpy.types.Node):
     }
 
     def rsp_compile(self, context, socket):
-        job = context.input(self, "Job", required=True)
-        if not isinstance(job, JobSpec):
-            raise TypeError("Job input requires JobSpec")
+        job = context.input(self, "Task", required=True)
+        if not isinstance(job, TaskSpec):
+            raise TypeError("Task input requires TaskSpec")
         audio = context.input(self, "Audio") or "NONE"
         values = {
             # Animation/video writes require Output panel "save" enabled.
@@ -330,7 +470,7 @@ class RSP_FilmNode(RSP_SettingsNode, bpy.types.Node):
         (B, "Motion Blur"),
         (F, "Motion Blur Shutter"),
     )
-    rsp_outputs = (("RenderSpineNodeSocketJob", "Job"),)
+    rsp_outputs = (("RenderSpineNodeSocketTask", "Task"),)
     rsp_overrides = (
         ("Transparent", "render.film_transparent"),
         ("Motion Blur", "render.use_motion_blur"),
@@ -343,7 +483,7 @@ class RSP_ColorManagementNode(RSP_SettingsNode, bpy.types.Node):
     bl_idname = "RenderSpineNodeColorManagement"
     bl_label = "Color Management"
     rsp_inputs = (J, (VT, "View Transform"), (LK, "Look"))
-    rsp_outputs = (("RenderSpineNodeSocketJob", "Job"),)
+    rsp_outputs = (("RenderSpineNodeSocketTask", "Task"),)
     rsp_overrides = (
         ("View Transform", "view_settings.view_transform"),
         ("Look", "view_settings.look"),
@@ -358,7 +498,7 @@ class RSP_SimplifyNode(RSP_SettingsNode, bpy.types.Node):
     bl_idname = "RenderSpineNodeSimplify"
     bl_label = "Simplify"
     rsp_inputs = (J, (B, "Enabled"), (I, "Subdivision"))
-    rsp_outputs = (("RenderSpineNodeSocketJob", "Job"),)
+    rsp_outputs = (("RenderSpineNodeSocketTask", "Task"),)
     rsp_overrides = (
         ("Enabled", "render.use_simplify"),
         ("Subdivision", "render.simplify_subdivision_render"),
@@ -380,7 +520,7 @@ class RSP_DenoisingNode(RSP_SettingsNode, bpy.types.Node):
         (DQ, "Quality"),
         (B, "Use GPU"),
     )
-    rsp_outputs = (("RenderSpineNodeSocketJob", "Job"),)
+    rsp_outputs = (("RenderSpineNodeSocketTask", "Task"),)
     rsp_overrides = (
         ("Enabled", "cycles.use_denoising"),
         ("Denoiser", "cycles.denoiser"),
@@ -405,7 +545,7 @@ class RSP_RenderPassesNode(RSP_SettingsNode, bpy.types.Node):
     bl_idname = "RenderSpineNodeRenderPasses"
     bl_label = "Render Passes"
     bl_width_default = 220
-    # Job first so it stays at the top (no draw_buttons — those bury inputs).
+    # Task first so it stays at the top (no draw_buttons — those bury inputs).
     rsp_inputs = (
         J,
         (VL, "View Layer"),
@@ -413,7 +553,7 @@ class RSP_RenderPassesNode(RSP_SettingsNode, bpy.types.Node):
         (F, "Alpha Threshold"),
         (I, "Cryptomatte Levels"),
     )
-    rsp_outputs = (("RenderSpineNodeSocketJob", "Job"),)
+    rsp_outputs = (("RenderSpineNodeSocketTask", "Task"),)
     rsp_overrides = ()
     rsp_defaults = {
         **{label: default for label, _rna_path, default in _PASS_BOOL_SPECS},
@@ -431,9 +571,9 @@ class RSP_RenderPassesNode(RSP_SettingsNode, bpy.types.Node):
                 pass
 
     def rsp_compile(self, context, socket):
-        job = context.input(self, "Job", required=True)
-        if not isinstance(job, JobSpec):
-            raise TypeError("Job input requires JobSpec")
+        job = context.input(self, "Task", required=True)
+        if not isinstance(job, TaskSpec):
+            raise TypeError("Task input requires TaskSpec")
         source = job.source_scene
         scene = source if isinstance(source, bpy.types.Scene) else bpy.data.scenes.get(source)
         scene = scene or bpy.context.scene
@@ -456,16 +596,16 @@ class RSP_CurrentSettingsNode(RSP_SettingsNode, bpy.types.Node):
     bl_idname = "RenderSpineNodeCurrentSettings"
     bl_label = "Current Settings"
     rsp_inputs = (J,)
-    rsp_outputs = (("RenderSpineNodeSocketJob", "Job"),)
+    rsp_outputs = (("RenderSpineNodeSocketTask", "Task"),)
     scene: PointerProperty(type=bpy.types.Scene)
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "scene")
 
     def rsp_compile(self, context, socket):
-        job = context.input(self, "Job", required=True)
-        if not isinstance(job, JobSpec):
-            raise TypeError("Job input requires JobSpec")
+        job = context.input(self, "Task", required=True)
+        if not isinstance(job, TaskSpec):
+            raise TypeError("Task input requires TaskSpec")
         scene = self.scene or bpy.context.scene
         return job.with_overrides(scene_snapshot(scene))
 
@@ -490,5 +630,8 @@ CLASSES = (
     RSP_DenoisingNode,
     RSP_RenderPassesNode,
 )
+
+OPERATORS = (RSP_OT_path_token_add,)
+MENU_CLASSES = (RSP_MT_path_tokens,)
 
 MENU_ITEMS = tuple((cls.bl_idname, cls.bl_label) for cls in CLASSES)

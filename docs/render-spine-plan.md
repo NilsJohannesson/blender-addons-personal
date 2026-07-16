@@ -33,9 +33,9 @@ RenderSpine should make those relationships visible and testable.
 
 ## Product goals
 
-### 1. Job-oriented graphs
+### 1. Task-oriented graphs
 
-A graph compiles into one or more render jobs. Each job contains:
+A graph compiles into one or more render tasks. Each task contains:
 
 - source scene;
 - camera, world, and view-layer selection;
@@ -128,9 +128,9 @@ These exclusions reduce security, migration, and maintenance risk.
 flowchart LR
     NodeTree[RenderSpineNodeTree] --> Validator[GraphValidator]
     Validator --> Compiler[GraphCompiler]
-    Compiler --> JobSpecs[ImmutableJobSpecs]
-    JobSpecs --> Inspector[DryRunInspector]
-    JobSpecs --> Transaction[SceneTransaction]
+    Compiler --> TaskSpecs[ImmutableTaskSpecs]
+    TaskSpecs --> Inspector[DryRunInspector]
+    TaskSpecs --> Transaction[SceneTransaction]
     Transaction --> Apply[ApplyAndRestore]
     Transaction --> Queue[SequentialRenderQueue]
     Queue --> Restore[GuaranteedRestore]
@@ -142,7 +142,7 @@ Location: `addons/render_spine/core/`, `tree.py`, and `sockets.py`.
 
 Responsibilities:
 
-- define pure `Override`, `JobSpec`, `JobList`, `Diagnostic`, and
+- define pure `Override`, `TaskSpec`, `TaskList`, `Diagnostic`, and
   `CompileResult` values;
 - validate link compatibility and node constraints;
 - find enabled job outputs;
@@ -158,13 +158,16 @@ Location: `addons/render_spine/nodes/`.
 Node categories:
 
 - **Values**: bool, int, float, string, vector, object, material, collection,
-  scene, world, action;
-- **Jobs**: seed, list, index, single output, list output;
+  scene, world, action; typed value lists (float/int/vector/color/string and
+  object/world/collection lists) for variant axes;
+- **Jobs** menu → **Tasks**: seed, list, index, single output, list output; Variant Axis and
+  Render Variants for cartesian job fan-out; Processor (queue progress) and
+  Viewer (apply connected job into the scene);
 - **Settings**: camera, world, view layer, engine, Cycles/Eevee samples,
   current settings, frame range, resolution, output path/format, film, color
   management, simplify;
 - **Objects and Collections**: visibility, transform, material, action,
-  collection visibility;
+  light settings (intensity/color/spread), collection visibility;
 - **Utility**: switch, safe boolean/math/string operations;
 - **Groups**: reusable render graphs applied as a job override layer.
 
@@ -304,8 +307,12 @@ When adapting upstream behavior:
 
 Potential later work, prioritized only after production feedback:
 
-1. dynamic-length job lists and variant cross-products;
-2. richer output-path tokens and collision previews;
+1. dynamic-length job lists and render variants
+   (typed lists, Variant Axis, Render Variants, Light Settings; list inputs on
+   setting sockets attach deferred axes expanded at job output);
+2. richer output-path tokens and collision previews
+   (path expressions: ``{token}`` + upstream ``$V/$res/$camera/$F4/$T{...}``
+   with live Resolved preview on Output Path);
 3. view-layer collection exclusion controls;
 4. compositor output templates using Blender 5.2 compositor APIs;
 5. background-process and multi-file queues;

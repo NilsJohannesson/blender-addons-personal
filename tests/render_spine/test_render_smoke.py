@@ -14,7 +14,7 @@ from common import assert_equal, finish, load_extension
 extension = load_extension()
 extension.register()
 
-from render_spine.core.model import JobSpec
+from render_spine.core.model import TaskSpec
 from render_spine.execution.transaction import Transaction
 
 
@@ -42,7 +42,7 @@ baseline_media = getattr(scene.render.image_settings, "media_type", None)
 temp_dir = tempfile.mkdtemp(prefix="render_spine_")
 output_path = os.path.join(temp_dir, "smoke.png")
 job = (
-    JobSpec(name="Smoke")
+    TaskSpec(name="Smoke")
     .with_override("camera", camera)
     .with_override("render.resolution_x", 8)
     .with_override("render.resolution_y", 8)

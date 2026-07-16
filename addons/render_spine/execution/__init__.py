@@ -2,13 +2,13 @@
 
 from .adapter import (
     CompileFailure,
-    compile_jobs,
-    job_name,
-    job_output,
-    job_overrides,
-    job_source_scene,
+    compile_tasks,
+    task_name,
+    task_output,
+    task_overrides,
+    task_source_scene,
     output_status,
-    summarize_jobs,
+    summarize_tasks,
 )
 from .runtime import RUNTIME
 from .runtime import register as register_runtime
@@ -29,13 +29,13 @@ __all__ = (
     "RUNTIME",
     "Transaction",
     "TransactionError",
-    "compile_jobs",
-    "job_name",
-    "job_output",
-    "job_overrides",
-    "job_source_scene",
+    "compile_tasks",
+    "task_name",
+    "task_output",
+    "task_overrides",
+    "task_source_scene",
     "output_status",
-    "summarize_jobs",
+    "summarize_tasks",
     "register",
     "unregister",
 )

@@ -12,7 +12,7 @@ from common import assert_equal, finish, load_extension
 extension = load_extension()
 extension.register()
 
-from render_spine.core.model import JobSpec
+from render_spine.core.model import TaskSpec
 from render_spine.execution.transaction import Transaction, TransactionError
 
 
@@ -40,7 +40,7 @@ layer_prefix = 'view_layers["{}"].layer_collection.children["{}"]'.format(
     view_layer.name, collection.name
 )
 job = (
-    JobSpec(name="Transaction")
+    TaskSpec(name="Transaction")
     .with_override("frame_start", 17)
     .with_override("render.resolution_x", 321)
     .with_override(
@@ -93,7 +93,7 @@ assert_equal(collection.hide_render, original_collection_render)
 assert_equal(layer_collection.exclude, original_exclude)
 assert_equal(layer_collection.holdout, original_holdout)
 
-invalid = JobSpec().with_override("_unsafe", True)
+invalid = TaskSpec().with_override("_unsafe", True)
 failed = False
 try:
     Transaction("Invalid").apply(invalid.overrides, bpy.context, bpy)
@@ -103,6 +103,45 @@ if not failed:
     raise AssertionError("Unsafe path was accepted")
 assert_equal(scene.frame_start, original_frame)
 
+light_data = bpy.data.lights.new("NRN Light", "AREA")
+light_obj = bpy.data.objects.new("NRN Light", light_data)
+scene.collection.objects.link(light_obj)
+original_energy = light_data.energy
+original_color = tuple(light_data.color)
+original_spread = float(light_data.spread)
+light_job = (
+    TaskSpec(name="Light")
+    .with_override(
+        "data.energy",
+        42.5,
+        target_type="objects",
+        target_name=light_obj.name,
+    )
+    .with_override(
+        "data.color",
+        (0.25, 0.5, 0.75),
+        target_type="objects",
+        target_name=light_obj.name,
+    )
+    .with_override(
+        "data.spread",
+        1.25,
+        target_type="objects",
+        target_name=light_obj.name,
+    )
+)
+light_tx = Transaction("Light settings")
+light_tx.apply(light_job.overrides, bpy.context, bpy)
+assert_equal(light_data.energy, 42.5)
+assert_equal(tuple(round(c, 5) for c in light_data.color), (0.25, 0.5, 0.75))
+assert_equal(round(light_data.spread, 5), 1.25)
+assert_equal(light_tx.restore(), "")
+assert_equal(light_data.energy, original_energy)
+assert_equal(tuple(light_data.color), original_color)
+assert_equal(float(light_data.spread), original_spread)
+
+bpy.data.objects.remove(light_obj)
+bpy.data.lights.remove(light_data)
 bpy.data.actions.remove(action)
 bpy.data.collections.remove(collection)
 bpy.data.objects.remove(obj)

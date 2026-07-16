@@ -169,7 +169,13 @@ def _scene_for_socket(socket, context):
 
 def _view_layer_items(self, context):
     scene = _scene_for_socket(self, context)
-    items = [("__NONE__", "—", "Do not override view layer")]
+    items = [
+        (
+            "__NONE__",
+            "—",
+            "Use the active view layer only (disable other layers for this task)",
+        )
+    ]
     if scene is not None:
         items.extend((layer.name, layer.name, "") for layer in scene.view_layers)
     return _cache_items(_view_layer_items_cache, self, items)
@@ -306,7 +312,7 @@ class RSP_IntSocket(RSP_SocketBase, bpy.types.NodeSocket):
     bl_idname = "RenderSpineNodeSocketInt"
     bl_label = "Integer"
     rsp_family = "INT"
-    rsp_accepts = ("INT",)
+    rsp_accepts = ("INT", "INT_LIST")
     color = (0.1, 0.55, 0.8, 1.0)
     default_value: IntProperty(default=0)
 
@@ -315,7 +321,7 @@ class RSP_FloatSocket(RSP_SocketBase, bpy.types.NodeSocket):
     bl_idname = "RenderSpineNodeSocketFloat"
     bl_label = "Float"
     rsp_family = "FLOAT"
-    rsp_accepts = ("FLOAT", "INT")
+    rsp_accepts = ("FLOAT", "INT", "FLOAT_LIST", "INT_LIST")
     color = (0.35, 0.65, 0.25, 1.0)
     default_value: FloatProperty(default=0.0)
 
@@ -324,6 +330,7 @@ class RSP_FloatSocket(RSP_SocketBase, bpy.types.NodeSocket):
 # Enum string sockets stay STRING-only so Collection≠Engine, etc.
 _STRING_COERCE_ACCEPTS = (
     "STRING",
+    "STRING_LIST",
     "BOOL",
     "INT",
     "FLOAT",
@@ -360,9 +367,10 @@ class RSP_FilePathSocket(RSP_SocketBase, bpy.types.NodeSocket):
         subtype="FILE_PATH",
         options={"PATH_SUPPORTS_BLEND_RELATIVE", "OUTPUT_PATH"},
         description=(
-            "Output path. Use // for blend-relative folders (not \\\\). "
-            "Supports {tokens}, e.g. "
-            "//renders/{camera}_{scene}_{view_layer}_{resolution}_v001"
+            "Output path expression. Use // for blend-relative folders. "
+            "Supports {tokens} and $tokens, e.g. "
+            "//renders/$label/$V/$res_$camera_$F4 or "
+            "//renders/{camera}_{resolution}_{variant_index}"
         ),
     )
 
@@ -566,9 +574,29 @@ class RSP_VectorSocket(RSP_SocketBase, bpy.types.NodeSocket):
     bl_idname = "RenderSpineNodeSocketVector"
     bl_label = "Vector"
     rsp_family = "VECTOR"
-    rsp_accepts = ("VECTOR",)
+    rsp_accepts = ("VECTOR", "VECTOR_LIST")
     color = (0.35, 0.35, 0.8, 1.0)
     default_value: FloatVectorProperty(size=3, subtype="XYZ")
+
+    def rsp_value(self):
+        return tuple(self.default_value)
+
+
+class RSP_ColorSocket(RSP_SocketBase, bpy.types.NodeSocket):
+    """RGB color picker; same VECTOR family as Vector for graph linking."""
+
+    bl_idname = "RenderSpineNodeSocketColor"
+    bl_label = "Color"
+    rsp_family = "VECTOR"
+    rsp_accepts = ("VECTOR", "VECTOR_LIST")
+    color = (0.8, 0.65, 0.2, 1.0)
+    default_value: FloatVectorProperty(
+        size=3,
+        subtype="COLOR",
+        min=0.0,
+        max=1.0,
+        default=(1.0, 1.0, 1.0),
+    )
 
     def rsp_value(self):
         return tuple(self.default_value)
@@ -587,7 +615,7 @@ class RSP_ObjectSocket(RSP_DatablockSocket, bpy.types.NodeSocket):
     bl_idname = "RenderSpineNodeSocketObject"
     bl_label = "Object"
     rsp_family = "OBJECT"
-    rsp_accepts = ("OBJECT",)
+    rsp_accepts = ("OBJECT", "OBJECT_LIST")
     default_value: PointerProperty(type=bpy.types.Object)
 
 
@@ -603,7 +631,7 @@ class RSP_CollectionSocket(RSP_DatablockSocket, bpy.types.NodeSocket):
     bl_idname = "RenderSpineNodeSocketCollection"
     bl_label = "Collection"
     rsp_family = "COLLECTION"
-    rsp_accepts = ("COLLECTION",)
+    rsp_accepts = ("COLLECTION", "COLLECTION_LIST")
     default_value: PointerProperty(type=bpy.types.Collection)
 
 
@@ -619,7 +647,7 @@ class RSP_WorldSocket(RSP_DatablockSocket, bpy.types.NodeSocket):
     bl_idname = "RenderSpineNodeSocketWorld"
     bl_label = "World"
     rsp_family = "WORLD"
-    rsp_accepts = ("WORLD",)
+    rsp_accepts = ("WORLD", "WORLD_LIST")
     default_value: PointerProperty(type=bpy.types.World)
 
 
@@ -631,20 +659,120 @@ class RSP_ActionSocket(RSP_DatablockSocket, bpy.types.NodeSocket):
     default_value: PointerProperty(type=bpy.types.Action)
 
 
-class RSP_JobSocket(RSP_SocketBase, bpy.types.NodeSocket):
-    bl_idname = "RenderSpineNodeSocketJob"
-    bl_label = "Job"
+class RSP_TaskSocket(RSP_SocketBase, bpy.types.NodeSocket):
+    bl_idname = "RenderSpineNodeSocketTask"
+    bl_label = "Task"
     rsp_family = "JOB"
     rsp_accepts = ("JOB",)
     color = (0.85, 0.25, 0.15, 1.0)
 
 
-class RSP_JobListSocket(RSP_SocketBase, bpy.types.NodeSocket):
-    bl_idname = "RenderSpineNodeSocketJobList"
-    bl_label = "Job List"
+class RSP_TaskListSocket(RSP_SocketBase, bpy.types.NodeSocket):
+    bl_idname = "RenderSpineNodeSocketTaskList"
+    bl_label = "Task List"
     rsp_family = "JOB_LIST"
     rsp_accepts = ("JOB_LIST",)
     color = (0.95, 0.5, 0.15, 1.0)
+
+
+_LIST_FAMILIES = (
+    "FLOAT_LIST",
+    "INT_LIST",
+    "VECTOR_LIST",
+    "STRING_LIST",
+    "OBJECT_LIST",
+    "WORLD_LIST",
+    "COLLECTION_LIST",
+    "VALUE_LIST",
+)
+
+
+class RSP_ListSocketBase(RSP_SocketBase):
+    """List sockets have no inline default; values come from list nodes."""
+
+    color = (0.4, 0.7, 0.7, 1.0)
+
+    def draw(self, context, layout, node, text):
+        layout.label(text=text or self.name)
+
+    def rsp_value(self):
+        return ()
+
+
+class RSP_FloatListSocket(RSP_ListSocketBase, bpy.types.NodeSocket):
+    bl_idname = "RenderSpineNodeSocketFloatList"
+    bl_label = "Float List"
+    rsp_family = "FLOAT_LIST"
+    rsp_accepts = ("FLOAT_LIST",)
+
+
+class RSP_IntListSocket(RSP_ListSocketBase, bpy.types.NodeSocket):
+    bl_idname = "RenderSpineNodeSocketIntList"
+    bl_label = "Int List"
+    rsp_family = "INT_LIST"
+    rsp_accepts = ("INT_LIST",)
+
+
+class RSP_VectorListSocket(RSP_ListSocketBase, bpy.types.NodeSocket):
+    bl_idname = "RenderSpineNodeSocketVectorList"
+    bl_label = "Vector List"
+    rsp_family = "VECTOR_LIST"
+    rsp_accepts = ("VECTOR_LIST",)
+
+
+class RSP_StringListSocket(RSP_ListSocketBase, bpy.types.NodeSocket):
+    bl_idname = "RenderSpineNodeSocketStringList"
+    bl_label = "String List"
+    rsp_family = "STRING_LIST"
+    rsp_accepts = ("STRING_LIST",)
+
+
+class RSP_ObjectListSocket(RSP_ListSocketBase, bpy.types.NodeSocket):
+    bl_idname = "RenderSpineNodeSocketObjectList"
+    bl_label = "Object List"
+    rsp_family = "OBJECT_LIST"
+    rsp_accepts = ("OBJECT_LIST",)
+    color = (0.8, 0.55, 0.2, 1.0)
+
+
+class RSP_WorldListSocket(RSP_ListSocketBase, bpy.types.NodeSocket):
+    bl_idname = "RenderSpineNodeSocketWorldList"
+    bl_label = "World List"
+    rsp_family = "WORLD_LIST"
+    rsp_accepts = ("WORLD_LIST",)
+    color = (0.8, 0.55, 0.2, 1.0)
+
+
+class RSP_CollectionListSocket(RSP_ListSocketBase, bpy.types.NodeSocket):
+    bl_idname = "RenderSpineNodeSocketCollectionList"
+    bl_label = "Collection List"
+    rsp_family = "COLLECTION_LIST"
+    rsp_accepts = ("COLLECTION_LIST",)
+    color = (0.8, 0.55, 0.2, 1.0)
+
+
+class RSP_ValueListSocket(RSP_ListSocketBase, bpy.types.NodeSocket):
+    """Accepts any typed value list for Variant Axis binding."""
+
+    bl_idname = "RenderSpineNodeSocketValueList"
+    bl_label = "Value List"
+    rsp_family = "VALUE_LIST"
+    rsp_accepts = _LIST_FAMILIES
+    color = (0.35, 0.75, 0.65, 1.0)
+
+
+class RSP_VariantAxisSocket(RSP_SocketBase, bpy.types.NodeSocket):
+    bl_idname = "RenderSpineNodeSocketVariantAxis"
+    bl_label = "Variant Axis"
+    rsp_family = "VARIANT_AXIS"
+    rsp_accepts = ("VARIANT_AXIS",)
+    color = (0.75, 0.35, 0.55, 1.0)
+
+    def draw(self, context, layout, node, text):
+        layout.label(text=text or self.name)
+
+    def rsp_value(self):
+        return None
 
 
 SOCKET_CLASSES = (
@@ -669,14 +797,24 @@ SOCKET_CLASSES = (
     RSP_FFmpegPresetSocket,
     RSP_FFmpegAudioSocket,
     RSP_VectorSocket,
+    RSP_ColorSocket,
     RSP_ObjectSocket,
     RSP_MaterialSocket,
     RSP_CollectionSocket,
     RSP_SceneSocket,
     RSP_WorldSocket,
     RSP_ActionSocket,
-    RSP_JobSocket,
-    RSP_JobListSocket,
+    RSP_TaskSocket,
+    RSP_TaskListSocket,
+    RSP_FloatListSocket,
+    RSP_IntListSocket,
+    RSP_VectorListSocket,
+    RSP_StringListSocket,
+    RSP_ObjectListSocket,
+    RSP_WorldListSocket,
+    RSP_CollectionListSocket,
+    RSP_ValueListSocket,
+    RSP_VariantAxisSocket,
 )
 
 

@@ -7,10 +7,10 @@ nodes.
 
 Houdini-style *description vs execution*, adapted to Blender (no USD stage):
 
-- **Render Job** is the anchor: defaults live on the node so a lone job works
+- **Render Task** is the anchor: defaults live on the node so a lone job works
   (scene/camera empty → active scene fallback at execute).
 - Optional chains (**Render Settings**, small override nodes) retarget the job.
-- **Job Output** + Preview / Apply / Render are the thin executor.
+- **Task Output** + Preview / Apply / Render are the thin executor.
 - Editing never mutates the scene; graphs compile to immutable job specs.
   Transactions restore after render, cancel, error, or unregister.
 
@@ -29,14 +29,14 @@ repository. Restart Blender or reload scripts after installation, then enable
 ## First graph
 
 1. Change an editor to **RenderSpine Graph**.
-2. Add **Render Job** — fill fields; works alone with defaults.
+2. Add **Render Task** — fill fields; works alone with defaults.
 3. Optionally chain **Render Settings** or small nodes to override.
-4. Finish with **Job Output**, or **Job List** + **Job List Output**.
+4. Finish with **Task Output**, or **Task List** + **Task List Output**.
 5. RenderSpine sidebar: **Preview** / **Apply** / **Render Selected** or **Render All**.
 
 ## Output path tokens
 
-Output Path / Render Job **Path** supports `{token}` substitution at
+Output Path / Render Task **Path** supports `{token}` substitution at
 Preview / Apply / Render time (safe replace only; no Python eval):
 
 `//renders/{camera}_{scene}_{view_layer}_{resolution}_v001`

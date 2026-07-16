@@ -36,14 +36,32 @@ class Override:
 
 
 @dataclass(frozen=True)
-class JobSpec:
-    """Immutable description of one render job."""
+class ValueList:
+    """Typed list of variant values from list nodes. Distinct from vector tuples."""
+
+    items: tuple = field(default_factory=tuple)
+
+    def __post_init__(self):
+        object.__setattr__(self, "items", tuple(freeze(item) for item in self.items))
+
+    def __iter__(self):
+        return iter(self.items)
+
+    def __len__(self):
+        return len(self.items)
+
+
+@dataclass(frozen=True)
+class TaskSpec:
+    """Immutable description of one render task."""
 
     name: str = "Render"
     source_scene: str = ""
     overrides: tuple = field(default_factory=tuple)
     tags: tuple = field(default_factory=tuple)
     metadata: tuple = field(default_factory=tuple)
+    # Pending VariantAxis values; expanded at compile output.
+    axes: tuple = field(default_factory=tuple)
 
     def with_override(self, path, value, target_type="", target_name=""):
         replacement = Override(path, value, target_type, target_name)
@@ -73,6 +91,10 @@ class JobSpec:
             result = result.with_override(path, value)
         return result
 
+    def with_axis(self, axis):
+        """Attach a deferred variant axis (expanded at job output)."""
+        return replace(self, axes=self.axes + (axis,))
+
     def with_metadata(self, key, value):
         values = dict(self.metadata)
         values[str(key)] = freeze(value)
@@ -89,28 +111,28 @@ class JobSpec:
 
 
 @dataclass(frozen=True)
-class JobList:
+class TaskList:
     """Stable collection used by list/index nodes and executors."""
 
-    jobs: tuple = field(default_factory=tuple)
+    tasks: tuple = field(default_factory=tuple)
 
     def __iter__(self):
-        return iter(self.jobs)
+        return iter(self.tasks)
 
     def __len__(self):
-        return len(self.jobs)
+        return len(self.tasks)
 
     def at(self, index):
-        if not self.jobs:
-            raise IndexError("Cannot index an empty job list")
-        return self.jobs[index]
+        if not self.tasks:
+            raise IndexError("Cannot index an empty task list")
+        return self.tasks[index]
 
 
 @dataclass(frozen=True)
 class CompileResult:
     """Compiler output and deterministic diagnostics."""
 
-    jobs: tuple
+    tasks: tuple
     diagnostics: tuple = field(default_factory=tuple)
     node_order: tuple = field(default_factory=tuple)
 

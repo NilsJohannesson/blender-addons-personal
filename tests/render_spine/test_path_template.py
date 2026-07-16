@@ -12,14 +12,16 @@ from common import assert_equal, finish, load_extension
 extension = load_extension()
 extension.register()
 
-from render_spine.core.model import JobSpec
+from render_spine.core.model import TaskSpec
 from render_spine.core.path_template import (
     PathTemplateError,
+    expand_path_expression,
     expand_path_template,
+    format_color_token,
 )
 from render_spine.execution.path_expand import (
-    expand_job_filepath,
-    resolved_job_overrides,
+    expand_task_filepath,
+    resolved_task_overrides,
     validate_output_filepath,
 )
 
@@ -50,7 +52,7 @@ scene.collection.objects.link(camera)
 scene.camera = camera
 
 job = (
-    JobSpec(name="Beauty")
+    TaskSpec(name="Beauty")
     .with_override("camera", camera)
     .with_override("render.resolution_x", 1280)
     .with_override("render.resolution_y", 720)
@@ -62,7 +64,7 @@ job = (
     .with_metadata("view_layer", "ViewLayer")
 )
 
-expanded = expand_job_filepath(
+expanded = expand_task_filepath(
     job.get_override("render.filepath"), job, scene
 )
 assert_equal(
@@ -72,7 +74,7 @@ assert_equal(
     ),
 )
 
-resolved = resolved_job_overrides(job, scene)
+resolved = resolved_task_overrides(job, scene)
 filepath = None
 for override in resolved:
     if override.path == "render.filepath":
@@ -100,6 +102,100 @@ else:
 assert_equal(
     validate_output_filepath("\\\\fileserver\\share\\shot\\beauty.png"),
     "\\\\fileserver\\share\\shot\\beauty.png",
+)
+
+import math
+
+variant_job = (
+    TaskSpec(name="Sweep")
+    .with_override("data.energy", 10.0)
+    .with_override("data.color", (1.0, 0.0, 0.0))
+    .with_override("data.spread", math.radians(80.0))
+    .with_override(
+        "render.filepath",
+        "//renders/{name}_{variant_index}_{intensity}_{color}_{spread}.png",
+    )
+    .with_metadata("variant_index", 3)
+    .with_metadata("variant", "intensity=10_color=1x0x0")
+)
+variant_path = expand_task_filepath(
+    variant_job.get_override("render.filepath"), variant_job, scene
+)
+assert_equal(
+    variant_path,
+    "//renders/Sweep_3_10_red_80.png",
+)
+
+collection_job = (
+    TaskSpec(name="Preview")
+    .with_override(
+        "hide_viewport",
+        False,
+        target_type="collections",
+        target_name="spot",
+    )
+    .with_override(
+        "hide_render",
+        True,
+        target_type="collections",
+        target_name="spot",
+    )
+    .with_override(
+        "render.filepath",
+        "//renders/{name}_{camera}_{resolution}_{collection}.png",
+    )
+)
+collection_path = expand_task_filepath(
+    collection_job.get_override("render.filepath"), collection_job, scene
+)
+assert_equal(
+    collection_path,
+    "//renders/Preview_HeroCam_1920x1080_spot.png",
+)
+
+assert_equal(format_color_token((1.0, 0.0, 0.0)), "red")
+assert_equal(format_color_token((0.0, 1.0, 0.0)), "green")
+assert_equal(format_color_token((0.0, 0.0, 1.0)), "blue")
+assert_equal(format_color_token((1.0, 1.0, 0.0)), "yellow")
+assert_equal(format_color_token((1.0, 0.5, 0.0)), "red-yellow")
+assert_equal(format_color_token((0.5, 1.0, 0.0)), "green-yellow")
+assert_equal(format_color_token((0.0, 1.0, 0.5)), "green-cyan")
+assert_equal(format_color_token((0.0, 0.5, 1.0)), "blue-cyan")
+assert_equal(format_color_token((0.5, 0.0, 1.0)), "blue-red")
+assert_equal(format_color_token((1.0, 0.0, 0.5)), "red-magenta")
+assert_equal(format_color_token((0.076, 1.0, 0.175)), "green")
+
+# Upstream-style $token path expressions.
+scene.frame_current = 77
+scene.render.resolution_x = 1203
+scene.render.resolution_y = 1080
+dollar_job = (
+    TaskSpec(name="Task")
+    .with_override("camera", camera)
+    .with_override("render.resolution_x", 1203)
+    .with_override("render.resolution_y", 1080)
+    .with_override(
+        "render.filepath",
+        "//RENDER/$V/$res$camera/$F4",
+    )
+    .with_metadata("version", 1)
+)
+dollar_path = expand_task_filepath(
+    dollar_job.get_override("render.filepath"), dollar_job, scene
+)
+assert_equal(dollar_path, "//RENDER/001/1203x1080HeroCam/0077")
+
+assert_equal(
+    expand_path_expression(
+        "renders/$label/$V/$T{%m}",
+        {
+            "name": "Beauty",
+            "label": "Beauty",
+            "version": "2",
+            "frame": "1",
+        },
+    ).split("/")[-2],
+    "002",
 )
 
 bpy.data.objects.remove(camera)

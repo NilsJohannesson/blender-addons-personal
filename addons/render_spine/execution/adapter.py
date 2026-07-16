@@ -40,7 +40,15 @@ def _compiler_module():
     raise CompileFailure("compile_tree() unavailable: " + "; ".join(errors))
 
 
-def compile_jobs(tree, context):
+_last_compile_warnings = ()
+
+
+def last_compile_warnings():
+    return _last_compile_warnings
+
+
+def compile_tasks(tree, context):
+    global _last_compile_warnings
     if tree is None:
         raise CompileFailure("No render-node tree is active")
     try:
@@ -51,6 +59,7 @@ def compile_jobs(tree, context):
         else:
             result = compiler(tree, strict=True)
     except Exception as exc:
+        _last_compile_warnings = ()
         errors = validation_messages(exc)
         raise CompileFailure("; ".join(errors) if errors else str(exc)) from exc
     diagnostics = _read(result, "diagnostics", default=())
@@ -60,17 +69,25 @@ def compile_jobs(tree, context):
         if str(_read(item, "severity", default="")).upper() == "ERROR"
     ]
     if failures:
+        _last_compile_warnings = ()
         raise CompileFailure("; ".join(validation_messages(failures)))
-    jobs = _read(result, "jobs", default=result)
-    if jobs is None:
+    _last_compile_warnings = tuple(
+        str(_read(item, "message", default=""))
+        for item in diagnostics
+        if str(_read(item, "severity", default="")).upper() == "WARNING"
+        and _read(item, "message", default="")
+    )
+    tasks = _read(result, "tasks", default=result)
+    if tasks is None:
         return []
-    if not isinstance(jobs, (list, tuple)):
+    if not isinstance(tasks, (list, tuple)):
         try:
-            jobs = list(jobs)
+            tasks = list(tasks)
         except TypeError as exc:
-            raise CompileFailure("Compiler result is not an iterable of jobs") from exc
-    return jobs
-
+            raise CompileFailure(
+                "Compiler result is not an iterable of tasks"
+            ) from exc
+    return tasks
 
 def validation_messages(value):
     if isinstance(value, (list, tuple)):
@@ -101,12 +118,12 @@ def validation_messages(value):
     return result
 
 
-def job_name(job, index):
+def task_name(job, index):
     value = _read(job, "name", "label", "title", "id", default=None)
-    return str(value) if value not in (None, "") else f"Job {index + 1}"
+    return str(value) if value not in (None, "") else f"Task {index + 1}"
 
 
-def job_overrides(job):
+def task_overrides(job):
     value = _read(
         job,
         "overrides",
@@ -118,14 +135,14 @@ def job_overrides(job):
     return tuple(value or ())
 
 
-def job_source_scene(job):
+def task_source_scene(job):
     value = _read(job, "source_scene", "scene", "scene_name", default="")
     if not isinstance(value, (str, type(None))):
         value = getattr(value, "name", value)
     return str(value or "")
 
 
-def job_output(job, scene=None, expand=True):
+def task_output(job, scene=None, expand=True):
     value = _read(
         job,
         "output_path",
@@ -135,7 +152,7 @@ def job_output(job, scene=None, expand=True):
         default=None,
     )
     if value is None and scene is not None:
-        for override in job_overrides(job):
+        for override in task_overrides(job):
             path = _read(override, "path", "rna_path", "data_path", default="")
             if path in ("render.filepath", "scene.render.filepath"):
                 value = _read(override, "value", "new_value", default=None)
@@ -145,10 +162,10 @@ def job_output(job, scene=None, expand=True):
     if isinstance(value, dict):
         value = _read(value, "path", "filepath", default="")
     text = str(value or "")
-    if expand and scene is not None and "{" in text:
-        from .path_expand import expand_job_filepath
+    if expand and scene is not None and ("{" in text or "$" in text):
+        from .path_expand import expand_task_filepath
 
-        text = expand_job_filepath(text, job, scene)
+        text = expand_task_filepath(text, job, scene)
     return text
 
 
@@ -178,20 +195,20 @@ def operation_summary(operation):
     return f"{kind} {target}.{path} = {value!r}"
 
 
-def summarize_jobs(jobs):
+def summarize_tasks(jobs):
     lines = []
     for index, job in enumerate(jobs):
-        operations = job_overrides(job)
-        lines.append(f"{index + 1}. {job_name(job, index)} ({len(operations)} overrides)")
+        operations = task_overrides(job)
+        lines.append(f"{index + 1}. {task_name(job, index)} ({len(operations)} overrides)")
         lines.extend(f"   {operation_summary(item)}" for item in operations)
-        output = job_output(job)
+        output = task_output(job)
         if output:
             lines.append(f"   output: {output}")
-    return "\n".join(lines) if lines else "No jobs compiled"
+    return "\n".join(lines) if lines else "No tasks compiled"
 
 
 def output_status(job, scene, bpy_module):
-    raw_path = job_output(job, scene)
+    raw_path = task_output(job, scene)
     if not raw_path:
         return "", False, "Output path is empty"
     absolute = bpy_module.path.abspath(raw_path)

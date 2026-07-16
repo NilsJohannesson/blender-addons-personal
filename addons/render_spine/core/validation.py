@@ -3,8 +3,43 @@
 from .model import Diagnostic
 
 
+_TASK_FAMILIES = frozenset(("JOB", "JOB_LIST"))
+
+
 def socket_family(socket):
     return getattr(socket, "rsp_family", getattr(socket, "bl_idname", ""))
+
+
+def _is_task_family(socket):
+    return socket_family(socket) in _TASK_FAMILIES
+
+
+def _orphan_task_chain_diagnostics(tree):
+    """Warn when a Task chain has no path to Task Output (ignored at compile)."""
+    diagnostics = []
+    for node in sorted(tree.nodes, key=lambda item: item.name):
+        if getattr(node, "mute", False):
+            continue
+        if getattr(node, "rsp_is_task_output", False):
+            continue
+        task_outputs = [socket for socket in node.outputs if _is_task_family(socket)]
+        if not task_outputs:
+            continue
+        if any(socket.is_linked for socket in task_outputs):
+            continue
+        task_inputs = [socket for socket in node.inputs if _is_task_family(socket)]
+        if not any(socket.is_linked for socket in task_inputs):
+            continue
+        diagnostics.append(
+            Diagnostic(
+                "WARNING",
+                "ORPHAN_TASK_CHAIN",
+                "Task output is unconnected; this chain is ignored until "
+                "linked into a Task Output",
+                node.name,
+            )
+        )
+    return diagnostics
 
 
 def validate_tree(tree):
@@ -32,6 +67,8 @@ def validate_tree(tree):
                     link.to_socket.name,
                 )
             )
+
+    diagnostics.extend(_orphan_task_chain_diagnostics(tree))
 
     for node in sorted(tree.nodes, key=lambda item: item.name):
         validate = getattr(node, "rsp_validate", None)

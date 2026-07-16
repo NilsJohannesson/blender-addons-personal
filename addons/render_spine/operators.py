@@ -1,4 +1,4 @@
-"""User operations for compiling, applying, and rendering jobs."""
+"""User operations for compiling, applying, and rendering tasks."""
 
 import bpy
 
@@ -6,12 +6,13 @@ from .execution import (
     CompileFailure,
     RUNTIME,
     TransactionError,
-    compile_jobs,
-    job_name,
-    job_overrides,
+    compile_tasks,
+    task_name,
+    task_overrides,
     output_status,
-    summarize_jobs,
+    summarize_tasks,
 )
+from .execution.adapter import last_compile_warnings
 from .execution.path_expand import PathTemplateError
 
 
@@ -41,26 +42,29 @@ def _state(context):
 def _compile(context):
     state = _state(context)
     try:
-        jobs = compile_jobs(active_tree(context), context)
+        jobs = compile_tasks(active_tree(context), context)
     except CompileFailure as exc:
         if state:
             state.compile_ok = False
             state.has_error = True
-            state.job_count = 0
+            state.task_count = 0
             state.status_message = str(exc)
             state.dry_run_summary = ""
         raise
     if state:
         state.compile_ok = True
         state.has_error = False
-        state.job_count = len(jobs)
-        state.active_job_index = min(
-            state.active_job_index, max(0, len(jobs) - 1)
+        state.task_count = len(jobs)
+        state.active_task_index = min(
+            state.active_task_index, max(0, len(jobs) - 1)
         )
-        state.status_message = f"Compiled {len(jobs)} job(s)"
-        state.dry_run_summary = summarize_jobs(jobs)
+        status = f"Compiled {len(jobs)} task(s)"
+        warnings = last_compile_warnings()
+        if warnings:
+            status = "{} · {}".format(status, warnings[0])
+        state.status_message = status
+        state.dry_run_summary = summarize_tasks(jobs)
     return jobs
-
 
 class RSP_OT_compile_preview(bpy.types.Operator):
     bl_idname = "rsp.compile_preview"
@@ -82,7 +86,7 @@ class RSP_OT_compile_preview(bpy.types.Operator):
             return {"CANCELLED"}
         state = _state(context)
         if jobs and state:
-            index = min(state.active_job_index, len(jobs) - 1)
+            index = min(state.active_task_index, len(jobs) - 1)
             try:
                 absolute, exists, message = output_status(
                     jobs[index], context.scene, bpy
@@ -93,14 +97,14 @@ class RSP_OT_compile_preview(bpy.types.Operator):
             state.output_path = absolute
             state.output_exists = exists
             state.output_status = message
-        self.report({"INFO"}, f"Compiled {len(jobs)} job(s)")
+        self.report({"INFO"}, f"Compiled {len(jobs)} task(s)")
         return {"FINISHED"}
 
 
 class RSP_OT_apply(bpy.types.Operator):
     bl_idname = "rsp.apply"
     bl_label = "Apply"
-    bl_description = "Apply selected job overrides transactionally"
+    bl_description = "Apply selected task overrides transactionally"
 
     @classmethod
     def poll(cls, context):
@@ -113,23 +117,23 @@ class RSP_OT_apply(bpy.types.Operator):
         try:
             jobs = _compile(context)
             if not jobs:
-                raise TransactionError("No jobs to apply")
+                raise TransactionError("No tasks to apply")
             state = _state(context)
-            index = min(state.active_job_index, len(jobs) - 1)
-            RUNTIME.apply_job(
-                jobs[index], context, job_name(jobs[index], index)
+            index = min(state.active_task_index, len(jobs) - 1)
+            RUNTIME.apply_task(
+                jobs[index], context, task_name(jobs[index], index)
             )
         except (CompileFailure, TransactionError) as exc:
             self.report({"ERROR"}, str(exc))
             return {"CANCELLED"}
-        self.report({"INFO"}, f"Applied {len(job_overrides(jobs[index]))} overrides")
+        self.report({"INFO"}, f"Applied {len(task_overrides(jobs[index]))} overrides")
         return {"FINISHED"}
 
 
 class RSP_OT_restore(bpy.types.Operator):
     bl_idname = "rsp.restore"
     bl_label = "Restore"
-    bl_description = "Reverse the currently applied job overrides"
+    bl_description = "Reverse the currently applied task overrides"
 
     @classmethod
     def poll(cls, context):
@@ -163,12 +167,12 @@ class _RSP_RenderQueueMixin:
         try:
             jobs = _compile(context)
             if not jobs:
-                raise TransactionError("No jobs to render")
+                raise TransactionError("No tasks to render")
             state = _state(context)
-            selected = min(state.active_job_index, len(jobs) - 1)
+            selected = min(state.active_task_index, len(jobs) - 1)
             indices = list(range(len(jobs))) if self.render_all else [selected]
             RUNTIME.configure_queue(jobs, indices, context.scene)
-            # Start first job before taking modal focus. A failure here used to
+            # Start first task before taking modal focus. A failure here used to
             # leave a modal handler registered and crash Blender's status bar.
             RUNTIME.start_next(context)
         except Exception as exc:
@@ -176,9 +180,10 @@ class _RSP_RenderQueueMixin:
             self.report({"ERROR"}, str(exc))
             return {"CANCELLED"}
         self._timer = context.window_manager.event_timer_add(
-            0.15, window=context.window
+            0.1, window=context.window
         )
         RUNTIME.attach_timer(context.window_manager, self._timer)
+        RUNTIME.refresh_processor_ui()
         context.window_manager.modal_handler_add(self)
         return {"RUNNING_MODAL"}
 
@@ -188,6 +193,9 @@ class _RSP_RenderQueueMixin:
             return {"RUNNING_MODAL"}
         if event.type != "TIMER":
             return {"PASS_THROUGH"}
+
+        # Upstream redraws Processor from modal timer + node RNA writes.
+        RUNTIME.refresh_processor_ui()
 
         queue_event = RUNTIME.consume_event()
         if queue_event and queue_event.startswith("ERROR:"):
@@ -235,14 +243,14 @@ class _RSP_RenderQueueMixin:
 class RSP_OT_render_selected(_RSP_RenderQueueMixin, bpy.types.Operator):
     bl_idname = "rsp.render_selected"
     bl_label = "Render Selected"
-    bl_description = "Apply, render, and restore the selected job"
+    bl_description = "Apply, render, and restore the selected task"
     render_all = False
 
 
 class RSP_OT_render_all(_RSP_RenderQueueMixin, bpy.types.Operator):
     bl_idname = "rsp.render_all"
     bl_label = "Render All"
-    bl_description = "Render every compiled job sequentially"
+    bl_description = "Render every compiled task sequentially"
     render_all = True
 
 

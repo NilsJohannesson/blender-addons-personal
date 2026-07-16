@@ -15,14 +15,14 @@ def _draw_status(layout, state):
         icon = "INFO"
     row.label(text=state.status_message, icon=icon)
 
-    if state.job_count:
+    if state.task_count:
         row = layout.row(align=True)
         row.prop(
             state,
-            "active_job_index",
-            text=f"Job Index (0-{state.job_count - 1})",
+            "active_task_index",
+            text=f"Task Index (0-{state.task_count - 1})",
         )
-        row.label(text=f"/ {state.job_count - 1}")
+        row.label(text=f"/ {state.task_count - 1}")
 
     if state.rendering:
         layout.label(
@@ -70,17 +70,17 @@ def _draw_header(self, context):
         layout.operator("rsp.cancel_render", text="", icon="CANCEL")
     else:
         icon = "CHECKMARK" if state.compile_ok else "INFO"
-        layout.label(text=f"{state.job_count} jobs", icon=icon)
+        layout.label(text=f"{state.task_count} tasks", icon=icon)
         layout.operator("rsp.compile_preview", text="", icon="FILE_REFRESH")
         layout.operator("rsp.render_selected", text="", icon="RENDER_STILL")
         layout.operator("rsp.render_all", text="", icon="RENDER_ANIMATION")
 
 
-class RSP_PT_render_jobs(bpy.types.Panel):
+class RSP_PT_render_tasks(bpy.types.Panel):
     bl_space_type = "NODE_EDITOR"
     bl_region_type = "UI"
     bl_category = "RenderSpine"
-    bl_label = "Render Jobs"
+    bl_label = "Render Tasks"
 
     @classmethod
     def poll(cls, context):
@@ -99,7 +99,7 @@ class RSP_PT_dry_run(bpy.types.Panel):
     bl_region_type = "UI"
     bl_category = "RenderSpine"
     bl_label = "Dry-Run Summary"
-    bl_parent_id = "RSP_PT_render_jobs"
+    bl_parent_id = "RSP_PT_render_tasks"
     bl_options = {"DEFAULT_CLOSED"}
 
     @classmethod
@@ -110,14 +110,14 @@ class RSP_PT_dry_run(bpy.types.Panel):
         summary = context.scene.rsp_state.dry_run_summary
         column = self.layout.column(align=True)
         if not summary:
-            column.label(text="Run Preview to compile jobs", icon="INFO")
+            column.label(text="Run Preview to compile tasks", icon="INFO")
             return
         for line in summary.splitlines():
             column.label(text=line)
 
 
 _CLASSES = (
-    RSP_PT_render_jobs,
+    RSP_PT_render_tasks,
     RSP_PT_dry_run,
 )
 
