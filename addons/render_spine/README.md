@@ -87,6 +87,16 @@ blender --factory-startup --command extension validate addons\render_spine
 blender --factory-startup --command extension build --source-dir addons\render_spine
 ```
 
+## Docs
+
+- [`docs/render-spine-plan.md`](../../docs/render-spine-plan.md) — goals and
+  architecture
+- [`docs/render-spine-port-map.md`](../../docs/render-spine-port-map.md) —
+  upstream RenderNode port decisions
+- [`docs/render-spine-acceptance.md`](../../docs/render-spine-acceptance.md) —
+  1.0 automated + manual gates
+- [`AGENTS.md`](../../AGENTS.md) — agent / contributor conventions
+
 ## Reference and license
 
 Apache-2.0. Workflow concepts informed by RenderNode by Atticus. No upstream

@@ -14,6 +14,13 @@ Blender 5.2+ node graph for building and executing render jobs
 
 See [addons/render_spine/README.md](addons/render_spine/README.md).
 
+Design and acceptance docs:
+
+- [docs/render-spine-plan.md](docs/render-spine-plan.md)
+- [docs/render-spine-port-map.md](docs/render-spine-port-map.md)
+- [docs/render-spine-acceptance.md](docs/render-spine-acceptance.md)
+- [AGENTS.md](AGENTS.md)
+
 ## Dev scratch
 
 `dev/` holds a local Blender scene (`renderspine-dev-001.blend`) and sample
