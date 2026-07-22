@@ -84,6 +84,35 @@ class RSP_ObjectValueNode(RSP_DatablockValueNode, bpy.types.Node):
     value: PointerProperty(type=bpy.types.Object)
 
 
+class RSP_CameraResolutionNode(RSP_ValueNodeBase, bpy.types.Node):
+    """Read the per-camera resolution provided by Nilor Blender Tools."""
+
+    bl_idname = "RenderSpineNodeCameraResolution"
+    bl_label = "Camera Resolution"
+    rsp_inputs = (("RenderSpineNodeSocketObject", "Camera"),)
+    rsp_outputs = (
+        ("RenderSpineNodeSocketInt", "Width"),
+        ("RenderSpineNodeSocketInt", "Height"),
+    )
+
+    def rsp_compile(self, context, socket):
+        camera = context.input(self, "Camera", required=True)
+        if not isinstance(camera, bpy.types.Object) or camera.type != "CAMERA":
+            raise ValueError("Camera Resolution requires a camera object")
+        settings = getattr(camera, "nilor_frustum", None)
+        width = int(getattr(settings, "res_x", 0) or 0)
+        height = int(getattr(settings, "res_y", 0) or 0)
+        if width <= 0 or height <= 0:
+            raise ValueError(
+                "Camera has no Nilor resolution; enable Nilor Blender Tools"
+            )
+        if socket.name == "Width":
+            return width
+        if socket.name == "Height":
+            return height
+        raise ValueError("Unknown Camera Resolution output: {}".format(socket.name))
+
+
 class RSP_MaterialValueNode(RSP_DatablockValueNode, bpy.types.Node):
     bl_idname = "RenderSpineNodeMaterialValue"
     bl_label = "Material"
@@ -127,6 +156,7 @@ CLASSES = (
     RSP_VectorValueNode,
     RSP_ColorValueNode,
     RSP_ObjectValueNode,
+    RSP_CameraResolutionNode,
     RSP_MaterialValueNode,
     RSP_CollectionValueNode,
     RSP_SceneValueNode,

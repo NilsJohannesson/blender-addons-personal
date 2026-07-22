@@ -34,11 +34,16 @@ Required:
    original values return.
 7. Apply selected job, save and reopen the file, then restore before rendering.
 8. Render Selected and confirm output path, frame range, camera, and format.
-9. Add a second job and Render All; confirm order and status.
-10. Cancel during a render and confirm all original scene values return.
-11. Disable addon while preview state is active and confirm cleanup restores
+9. In a scene with two enabled view layers, select one on Render Task (or use
+   Set View Layer) and confirm only that layer renders; Restore must re-enable
+   the original layer set.
+10. Connect a Nilor camera through Camera Resolution into Resolution and
+    confirm its per-camera width and height compile into the job.
+11. Add a second job and Render All; confirm order and status.
+12. Cancel during a render and confirm all original scene values return.
+13. Disable addon while preview state is active and confirm cleanup restores
     original values.
-12. Save and reopen a node graph; confirm links, datablock references, and job
+14. Save and reopen a node graph; confirm links, datablock references, and job
     settings persist.
 
 Version 1.0 is accepted only when every item passes on Blender 5.2.

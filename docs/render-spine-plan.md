@@ -157,8 +157,9 @@ Location: `addons/render_spine/nodes/`.
 
 Node categories:
 
-- **Values**: bool, int, float, string, vector, object, material, collection,
-  scene, world, action; typed value lists (float/int/vector/color/string and
+- **Values**: bool, int, float, string, vector, object, camera resolution
+  (duck-typed Nilor `nilor_frustum` integration), material, collection, scene,
+  world, action; typed value lists (float/int/vector/color/string and
   object/world/collection lists) for variant axes;
 - **Jobs** menu → **Tasks**: seed, list, index, single output, list output; Variant Axis and
   Render Variants for cartesian job fan-out; Processor (queue progress) and
@@ -173,6 +174,11 @@ Node categories:
 
 Each setting node receives a job and emits a new job. It never writes to the
 scene.
+
+Render Task and Set View Layer pin one view layer per job by overriding every
+`ViewLayer.use` flag transactionally. Render Task's empty **—** choice means
+the active view layer. Task Seed chains must include Set View Layer when
+single-layer rendering is required.
 
 ### Execution layer
 

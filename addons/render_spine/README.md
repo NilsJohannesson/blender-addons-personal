@@ -34,6 +34,15 @@ repository. Restart Blender or reload scripts after installation, then enable
 4. Finish with **Task Output**, or **Task List** + **Task List Output**.
 5. RenderSpine sidebar: **Preview** / **Apply** / **Render Selected** or **Render All**.
 
+**Render Task** renders only its selected **View Layer** and temporarily
+disables the others. The **—** choice uses the active view layer. For a
+Task Seed chain, add **Set View Layer** before Task Output to get the same
+single-layer behavior.
+
+The **Camera Resolution** value node reads **Width** and **Height** from
+Nilor Blender Tools' per-camera `nilor_frustum` settings. Connect a camera
+Object and wire the outputs into **Resolution** or **Render Task**.
+
 ## Output path tokens
 
 Output Path / Render Task **Path** supports `{token}` substitution at
@@ -49,8 +58,8 @@ Unknown tokens error with the available list.
 
 ## Version 1.0 nodes
 
-- Values: boolean, integer, float, string, vector, object, material,
-  collection, scene, world, and action.
+- Values: boolean, integer, float, string, vector, object, camera resolution,
+  material, collection, scene, world, and action.
 - Jobs: seed, list, index, single output, and list output.
 - Settings: camera, world, view layer, engine, Cycles/Eevee samples, current
   settings, frame range, resolution, output path/format, FFmpeg video (H.264

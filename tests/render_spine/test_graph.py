@@ -69,6 +69,7 @@ bpy.data.node_groups.remove(orphan_tree)
 
 # Fat Render Task anchor works standalone.
 render_job_tree = bpy.data.node_groups.new("NRN Render Task", "RenderSpineNodeTree")
+extra_view_layer = bpy.context.scene.view_layers.new("RSP Not Rendered")
 render_job = render_job_tree.nodes.new("RenderSpineNodeRenderTask")
 render_job.inputs["Name"].default_value = "Combined"
 render_job.inputs["Engine"].default_value = "CYCLES"
@@ -100,6 +101,10 @@ assert_equal(dict(combined.metadata).get("view_layer"), active_vl)
 assert_equal(
     combined.get_override('view_layers["{}"].use'.format(active_vl)),
     True,
+)
+assert_equal(
+    combined.get_override('view_layers["{}"].use'.format(extra_view_layer.name)),
+    False,
 )
 
 # Optional Render Settings chain overrides samples/engine.
@@ -137,6 +142,7 @@ assert_equal(
 bpy.data.node_groups.remove(path_chain_tree)
 
 bpy.data.node_groups.remove(render_job_tree)
+bpy.context.scene.view_layers.remove(extra_view_layer)
 
 # Render Passes defaults to Combined only on the active view layer.
 passes_tree = bpy.data.node_groups.new("NRN Passes", "RenderSpineNodeTree")
@@ -214,6 +220,58 @@ coerce_job = coerce_tree.compile(strict=True).tasks[0]
 assert_equal(coerce_job.get_override("render.filepath"), "//render/RSP_Spot.png")
 bpy.data.node_groups.remove(coerce_tree)
 bpy.data.collections.remove(collection)
+
+# Camera Resolution reads Nilor's per-camera values without importing Nilor.
+class RSP_TestNilorFrustum(bpy.types.PropertyGroup):
+    res_x: bpy.props.IntProperty(default=1920, min=1)
+    res_y: bpy.props.IntProperty(default=1080, min=1)
+
+
+bpy.utils.register_class(RSP_TestNilorFrustum)
+bpy.types.Object.nilor_frustum = bpy.props.PointerProperty(
+    type=RSP_TestNilorFrustum
+)
+camera_data = bpy.data.cameras.new("RSP Resolution Camera")
+camera_object = bpy.data.objects.new("RSP Resolution Camera", camera_data)
+bpy.context.scene.collection.objects.link(camera_object)
+camera_object.nilor_frustum.res_x = 4096
+camera_object.nilor_frustum.res_y = 1716
+
+camera_res_tree = bpy.data.node_groups.new(
+    "NRN Camera Resolution", "RenderSpineNodeTree"
+)
+camera_value = camera_res_tree.nodes.new("RenderSpineNodeObjectValue")
+camera_value.value = camera_object
+camera_resolution = camera_res_tree.nodes.new(
+    "RenderSpineNodeCameraResolution"
+)
+camera_res_seed = camera_res_tree.nodes.new("RenderSpineNodeTaskSeed")
+camera_res_settings = camera_res_tree.nodes.new("RenderSpineNodeResolution")
+camera_res_out = camera_res_tree.nodes.new("RenderSpineNodeTaskOutput")
+camera_res_tree.links.new(
+    camera_value.outputs["Value"], camera_resolution.inputs["Camera"]
+)
+camera_res_tree.links.new(
+    camera_resolution.outputs["Width"], camera_res_settings.inputs["Width"]
+)
+camera_res_tree.links.new(
+    camera_resolution.outputs["Height"], camera_res_settings.inputs["Height"]
+)
+camera_res_tree.links.new(
+    camera_res_seed.outputs["Task"], camera_res_settings.inputs["Task"]
+)
+camera_res_tree.links.new(
+    camera_res_settings.outputs["Task"], camera_res_out.inputs["Task"]
+)
+camera_res_job = camera_res_tree.compile(strict=True).tasks[0]
+assert_equal(camera_res_job.get_override("render.resolution_x"), 4096)
+assert_equal(camera_res_job.get_override("render.resolution_y"), 1716)
+
+bpy.data.node_groups.remove(camera_res_tree)
+bpy.data.objects.remove(camera_object)
+bpy.data.cameras.remove(camera_data)
+del bpy.types.Object.nilor_frustum
+bpy.utils.unregister_class(RSP_TestNilorFrustum)
 
 # Collection Visibility: Enabled/Holdout on LayerCollection + Collection hides.
 vis_collection = bpy.data.collections.new("RSP_VisCol")
